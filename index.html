@@ -76,8 +76,8 @@
   .badge { display: inline-block; font-size: 10px; padding: 2px 6px; border-radius: 4px; font-weight: 500; }
   .badge-etf { background: var(--amber-bg); color: var(--amber); }
 
-  .cal-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; margin-bottom: 14px; }
-  @media (max-width: 480px) { .cal-grid { grid-template-columns: repeat(3, 1fr); } }
+  .cal-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; margin-bottom: 14px; min-width: 0; }
+  @media (max-width: 540px) { .cal-grid { grid-template-columns: repeat(3, 1fr); } }
   .cal-m { background: var(--surface2); border-radius: var(--radius); padding: 8px 6px; text-align: center; min-height: 80px; transition: opacity 0.15s; }
   .cal-m.has { background: var(--green-bg); cursor: pointer; }
   .cal-m.has:hover { opacity: 0.8; }
@@ -86,6 +86,8 @@
   .month-detail.show { display: block; }
   .month-detail-title { font-size: 13px; font-weight: 600; margin-bottom: 10px; color: var(--green); }
   .month-detail table { min-width: 0; }
+  .month-detail th, .month-detail td { white-space: nowrap; }
+  .month-detail td:first-child { white-space: normal; }
   tfoot td { border-top: 1px solid var(--border); }
   .cal-m-name { font-size: 10px; color: var(--text2); margin-bottom: 5px; font-weight: 500; }
   .cal-m.has .cal-m-name { color: var(--green); }
