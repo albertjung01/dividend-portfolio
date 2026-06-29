@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>배당 투자 포트폴리오</title>
+<style>
+  :root {
+    --bg: #f8f8f6;
+    --surface: #ffffff;
+    --surface2: #f2f1ee;
+    --border: rgba(0,0,0,0.1);
+    --text: #1a1a18;
+    --text2: #6b6b67;
+    --text3: #9a9a96;
+    --green: #1a7a4a;
+    --green-bg: #e8f5ee;
+    --red: #c0392b;
+    --red-bg: #fdecea;
+    --blue: #1a5fa8;
+    --blue-bg: #e8f0fb;
+    --amber: #8a5e00;
+    --amber-bg: #fff8e6;
+    --radius: 8px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1a1a18;
+      --surface: #252523;
+      --surface2: #2e2e2c;
+      --border: rgba(255,255,255,0.1);
+      --text: #f0f0ee;
+      --text2: #a0a09c;
+      --text3: #686864;
+      --green: #4caf7a;
+      --green-bg: #0f2e1c;
+      --red: #e57373;
+      --red-bg: #2e1010;
+      --blue: #6faee8;
+      --blue-bg: #0f1e30;
+      --amber: #f0b942;
+      --amber-bg: #2a1f00;
+    }
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, 'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+  .header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 16px 20px; display: flex; align-items: center; gap: 10px; position: sticky; top: 0; z-index: 10; }
+  .header-icon { width: 32px; height: 32px; background: var(--green-bg); border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 16px; }
+  .header h1 { font-size: 16px; font-weight: 600; color: var(--text); }
+  .header-sub { font-size: 12px; color: var(--text2); margin-top: 1px; }
+  .tabs { display: flex; background: var(--surface); border-bottom: 1px solid var(--border); overflow-x: auto; }
+  .tab { padding: 12px 20px; font-size: 14px; font-weight: 500; color: var(--text2); cursor: pointer; border: none; background: none; border-bottom: 2px solid transparent; white-space: nowrap; transition: color 0.15s; }
+  .tab.active { color: var(--text); border-bottom-color: var(--text); }
+  .content { padding: 16px; max-width: 900px; margin: 0 auto; }
+  .sec { display: none; }
+  .sec.active { display: block; }
+
+  .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; margin-bottom: 16px; }
+  .stat { background: var(--surface); border-radius: var(--radius); padding: 14px; border: 1px solid var(--border); }
+  .stat-label { font-size: 11px; color: var(--text2); margin-bottom: 6px; }
+  .stat-value { font-size: 18px; font-weight: 600; }
+  .stat-value.green { color: var(--green); }
+  .stat-value.red { color: var(--red); }
+
+  .card { background: var(--surface); border-radius: 12px; border: 1px solid var(--border); padding: 16px; margin-bottom: 14px; }
+  .card-title { font-size: 14px; font-weight: 600; margin-bottom: 14px; display: flex; align-items: center; gap: 6px; }
+
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 500px; }
+  th { text-align: left; padding: 8px 10px; font-size: 11px; font-weight: 500; color: var(--text2); border-bottom: 1px solid var(--border); }
+  td { padding: 12px 10px; border-bottom: 1px solid var(--border); }
+  tr:last-child td { border-bottom: none; }
+  .green { color: var(--green); }
+  .red { color: var(--red); }
+
+  .badge { display: inline-block; font-size: 10px; padding: 2px 6px; border-radius: 4px; font-weight: 500; }
+  .badge-etf { background: var(--amber-bg); color: var(--amber); }
+
+  .cal-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; margin-bottom: 14px; }
+  @media (max-width: 480px) { .cal-grid { grid-template-columns: repeat(3, 1fr); } }
+  .cal-m { background: var(--surface2); border-radius: var(--radius); padding: 8px 6px; text-align: center; min-height: 80px; }
+  .cal-m.has { background: var(--green-bg); }
+  .cal-m-name { font-size: 10px; color: var(--text2); margin-bottom: 5px; font-weight: 500; }
+  .cal-m.has .cal-m-name { color: var(--green); }
+  .cal-m-amt { font-size: 12px; font-weight: 600; color: var(--green); }
+  .cal-m-stocks { font-size: 9px; color: var(--text2); margin-top: 3px; line-height: 1.5; }
+  .cal-m-bar { height: 3px; background: var(--border); border-radius: 2px; margin-top: 5px; }
+  .cal-m-bar-fill { height: 100%; background: var(--green); border-radius: 2px; }
+  .q-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+  @media (max-width: 400px) { .q-grid { grid-template-columns: repeat(2, 1fr); } }
+  .q-stat { background: var(--surface2); border-radius: var(--radius); padding: 10px; text-align: center; }
+  .q-label { font-size: 10px; color: var(--text2); margin-bottom: 4px; }
+  .q-value { font-size: 14px; font-weight: 600; color: var(--green); }
+
+  .input-card { background: var(--surface); border-radius: 12px; border: 1px solid var(--border); padding: 16px; margin-bottom: 14px; }
+  .input-row { display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 8px; margin-bottom: 10px; }
+  .input-row2 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-bottom: 12px; }
+  .inp-group { display: flex; flex-direction: column; gap: 4px; }
+  .inp-group label { font-size: 11px; color: var(--text2); }
+  input, select { width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); color: var(--text); font-size: 13px; font-family: inherit; }
+  input:focus, select:focus { outline: none; border-color: var(--green); }
+  .btn { padding: 9px 16px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); color: var(--text); font-size: 13px; font-family: inherit; cursor: pointer; }
+  .btn:hover { background: var(--surface2); }
+  .btn-primary { background: var(--green); color: #fff; border-color: var(--green); }
+  .btn-primary:hover { opacity: 0.88; background: var(--green); }
+  .btn-danger { color: var(--red); }
+  .btn-row { display: flex; gap: 8px; }
+
+  .notice { background: var(--amber-bg); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 14px; font-size: 12px; color: var(--amber); margin-bottom: 14px; line-height: 1.6; }
+  .info-section { margin-bottom: 14px; }
+  .info-section p { font-size: 13px; color: var(--text2); line-height: 1.8; }
+
+  .reinvest-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 14px; }
+  @media (max-width: 400px) { .reinvest-grid { grid-template-columns: 1fr; } }
+  .result-box { background: var(--green-bg); border: 1px solid var(--border); border-radius: 12px; padding: 16px; text-align: center; }
+  .result-label { font-size: 12px; color: var(--green); margin-bottom: 6px; }
+  .result-value { font-size: 24px; font-weight: 700; color: var(--green); }
+
+  .empty { text-align: center; padding: 32px; color: var(--text3); font-size: 13px; }
+  .tag { display: inline-block; font-size: 10px; padding: 1px 6px; border-radius: 4px; background: var(--blue-bg); color: var(--blue); margin-left: 4px; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-icon">💰</div>
+  <div>
+    <div class="header h1" style="font-size:16px;font-weight:600">배당 투자 포트폴리오</div>
+    <div class="header-sub">노후 배당 전용 관리 서비스</div>
+  </div>
+</div>
+
+<div class="tabs">
+  <button class="tab active" onclick="sw('pf')">📊 포트폴리오</button>
+  <button class="tab" onclick="sw('cal')">📅 배당 달력</button>
+  <button class="tab" onclick="sw('add')">➕ 종목 관리</button>
+  <button class="tab" onclick="sw('ri')">🔄 재투자 계산</button>
+</div>
+
+<div class="content">
+
+<!-- 포트폴리오 탭 -->
+<div id="pf" class="sec active">
+  <div class="stat-grid" id="stats"></div>
+  <div class="card">
+    <div class="card-title">📋 보유 종목</div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>종목명</th>
+            <th>수량</th>
+            <th>매입가</th>
+            <th>현재가</th>
+            <th>수익률</th>
+            <th>연배당금</th>
+            <th>배당수익률</th>
+          </tr>
+        </thead>
+        <tbody id="stock-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- 배당 달력 탭 -->
+<div id="cal" class="sec">
+  <div class="card">
+    <div class="card-title">📅 월별 배당금 수령 일정</div>
+    <div class="cal-grid" id="cal-grid"></div>
+    <div style="font-size:11px;color:var(--text2);margin-bottom:12px">※ 초록색 = 배당 수령 월</div>
+    <div class="card-title" style="margin-top:8px">분기별 합계</div>
+    <div class="q-grid" id="q-grid"></div>
+  </div>
+</div>
+
+<!-- 종목 관리 탭 -->
+<div id="add" class="sec">
+  <div class="notice">💡 증권사 앱 캡처 이미지를 Claude 채팅에 올리면 OCR로 자동 추출해드립니다.</div>
+  <div class="input-card">
+    <div class="card-title">종목 추가</div>
+    <div class="input-row">
+      <div class="inp-group"><label>종목명</label><input id="i-name" placeholder="예: TIGER 배당커버드콜액티브"></div>
+      <div class="inp-group"><label>시장 구분</label><select id="i-mkt"><option value="ETF">ETF</option><option value="KR">한국주식</option><option value="US">미국주식</option></select></div>
+      <div class="inp-group"><label>수량 (주)</label><input id="i-qty" type="number" placeholder="981"></div>
+    </div>
+    <div class="input-row2">
+      <div class="inp-group"><label>매입 평균가 (원)</label><input id="i-buy" type="number" placeholder="25899"></div>
+      <div class="inp-group"><label>현재가 (원)</label><input id="i-cur" type="number" placeholder="27300"></div>
+      <div class="inp-group"><label>월 주당 배당금 (원)</label><input id="i-div" type="number" placeholder="320"></div>
+    </div>
+    <div class="inp-group" style="margin-bottom:12px">
+      <label>배당 지급월 (콤마 구분, 예: 1,2,3,...,12 또는 3,6,9,12)</label>
+      <input id="i-months" placeholder="1,2,3,4,5,6,7,8,9,10,11,12">
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-primary" onclick="addStock()">종목 추가</button>
+      <button class="btn" onclick="resetAll()">전체 초기화</button>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-title">등록된 종목 목록</div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>종목명</th><th>수량</th><th>배당월</th><th>월배당금</th><th></th></tr></thead>
+        <tbody id="mgmt-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- 재투자 계산기 탭 -->
+<div id="ri" class="sec">
+  <div class="card">
+    <div class="card-title">🔄 배당 재투자 복리 계산기</div>
+    <div class="reinvest-grid">
+      <div class="inp-group"><label>초기 투자금 (만원)</label><input id="r-init" type="number" value="7800" oninput="calcR()"></div>
+      <div class="inp-group"><label>연간 배당수익률 (%)</label><input id="r-yld" type="number" value="12" step="0.1" oninput="calcR()"></div>
+      <div class="inp-group"><label>매년 추가 투자 (만원)</label><input id="r-add" type="number" value="0" oninput="calcR()"></div>
+      <div class="inp-group"><label>투자 기간 (년)</label><input id="r-yrs" type="number" value="20" oninput="calcR()"></div>
+    </div>
+    <div class="reinvest-grid" style="margin-bottom:0">
+      <div class="result-box"><div class="result-label">목표 시점 자산</div><div class="result-value" id="r-final">-</div></div>
+      <div class="result-box"><div class="result-label">연간 배당금 (목표 시점)</div><div class="result-value" id="r-ann">-</div></div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-title">연도별 성장 추이</div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>기간</th><th>누적 자산</th><th>연간 배당금</th><th>복리 효과</th></tr></thead>
+        <tbody id="r-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+</div><!-- .content -->
+
+<script>
+const KEY = 'div-portfolio-v1';
+let stocks = [];
+
+function load() {
+  try { stocks = JSON.parse(localStorage.getItem(KEY)) || []; } catch(e) { stocks = []; }
+  if (!stocks.length) {
+    stocks = [
+      {id:1, name:'TIGER 배당커버드콜액티브', mkt:'ETF', qty:981, buyP:25899, curP:27300, divM:320, months:[1,2,3,4,5,6,7,8,9,10,11,12]},
+      {id:2, name:'KODEX AI테크TOP10타겟커버드콜', mkt:'ETF', qty:2000, buyP:13625, curP:12410, divM:150, months:[1,2,3,4,5,6,7,8,9,10,11,12]},
+      {id:3, name:'KODEX 200타겟위클리커버드콜', mkt:'ETF', qty:1000, buyP:26875, curP:26600, divM:350, months:[1,2,3,4,5,6,7,8,9,10,11,12]}
+    ];
+    save();
+  }
+}
+
+function save() { localStorage.setItem(KEY, JSON.stringify(stocks)); }
+
+function fmt(n) {
+  const abs = Math.abs(n);
+  const sign = n < 0 ? '-' : '';
+  if (abs >= 100000000) return sign + '₩' + (Math.round(abs/10000000)/10) + '억';
+  if (abs >= 10000) return sign + '₩' + Math.round(abs/10000) + '만';
+  return sign + '₩' + Math.round(abs).toLocaleString();
+}
+
+function fmtFull(n) {
+  return (n < 0 ? '-' : '') + '₩' + Math.round(Math.abs(n)).toLocaleString();
+}
+
+function sw(id) {
+  document.querySelectorAll('.tab').forEach((t, i) => t.classList.toggle('active', ['pf','cal','add','ri'][i] === id));
+  document.querySelectorAll('.sec').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  if (id === 'pf') renderPf();
+  if (id === 'cal') renderCal();
+  if (id === 'add') renderMgmt();
+  if (id === 'ri') calcR();
+}
+
+function renderPf() {
+  let inv=0, val=0, annDiv=0;
+  stocks.forEach(s => {
+    inv += s.qty * s.buyP;
+    val += s.qty * s.curP;
+    annDiv += s.qty * s.divM * s.months.length;
+  });
+  const gain = val - inv;
+  const gainPct = inv ? ((gain/inv)*100) : 0;
+
+  document.getElementById('stats').innerHTML = [
+    {label:'총 매입금액', val:fmt(inv), cls:''},
+    {label:'현재 평가금액', val:fmt(val), cls:''},
+    {label:'평가손익', val:(gain>=0?'+':'')+fmt(gain)+' ('+(gainPct>=0?'+':'')+gainPct.toFixed(1)+'%)', cls: gain>=0?'green':'red'},
+    {label:'연간 예상 배당금', val:fmt(annDiv), cls:'green'},
+    {label:'월 평균 배당금', val:fmt(Math.round(annDiv/12)), cls:'green'},
+    {label:'평균 배당수익률', val:val?((annDiv/val)*100).toFixed(1)+'%':'0%', cls:'green'}
+  ].map(s => `<div class="stat"><div class="stat-label">${s.label}</div><div class="stat-value ${s.cls}">${s.val}</div></div>`).join('');
+
+  document.getElementById('stock-tbody').innerHTML = stocks.length
+    ? stocks.map(s => {
+        const ann = s.qty * s.divM * s.months.length;
+        const gp = ((s.curP - s.buyP) / s.buyP * 100);
+        const yld = s.curP ? ((ann / (s.qty * s.curP)) * 100) : 0;
+        return `<tr>
+          <td><span class="badge badge-etf">${s.mkt}</span> ${s.name}</td>
+          <td>${s.qty.toLocaleString()}주</td>
+          <td>${fmtFull(s.buyP)}</td>
+          <td>${fmtFull(s.curP)}</td>
+          <td class="${gp>=0?'green':'red'}">${gp>=0?'+':''}${gp.toFixed(1)}%</td>
+          <td class="green">${fmt(ann)}</td>
+          <td class="green">${yld.toFixed(1)}%</td>
+        </tr>`;
+      }).join('')
+    : '<tr><td colspan="7" class="empty">종목을 추가해주세요</td></tr>';
+}
+
+function renderCal() {
+  const mnames = ['1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'];
+  const byM = Array(12).fill(0).map(() => ({amt:0, names:[]}));
+  stocks.forEach(s => {
+    s.months.forEach(m => {
+      byM[m-1].amt += s.qty * s.divM;
+      byM[m-1].names.push(s.name.length > 10 ? s.name.substring(0,10)+'...' : s.name);
+    });
+  });
+  const max = Math.max(...byM.map(m => m.amt), 1);
+  document.getElementById('cal-grid').innerHTML = byM.map((m, i) => `
+    <div class="cal-m${m.amt?' has':''}">
+      <div class="cal-m-name">${mnames[i]}</div>
+      ${m.amt
+        ? `<div class="cal-m-amt">${fmt(m.amt)}</div>
+           <div class="cal-m-stocks">${m.names.map(n=>n.split('커버드')[0].trim()).join('<br>')}</div>
+           <div class="cal-m-bar"><div class="cal-m-bar-fill" style="width:${Math.round(m.amt/max*100)}%"></div></div>`
+        : '<div style="font-size:10px;color:var(--text3);margin-top:8px">-</div>'
+      }
+    </div>`).join('');
+
+  const q = [0,0,0,0];
+  byM.forEach((m, i) => q[Math.floor(i/3)] += m.amt);
+  document.getElementById('q-grid').innerHTML = ['1분기 (1~3월)','2분기 (4~6월)','3분기 (7~9월)','4분기 (10~12월)'].map((n,i) => `
+    <div class="q-stat"><div class="q-label">${n}</div><div class="q-value">${fmt(q[i])}</div></div>`).join('');
+}
+
+function renderMgmt() {
+  document.getElementById('mgmt-tbody').innerHTML = stocks.length
+    ? stocks.map(s => {
+        const mon = s.qty * s.divM;
+        return `<tr>
+          <td>${s.name}</td>
+          <td>${s.qty.toLocaleString()}주</td>
+          <td style="font-size:11px;color:var(--text2)">${s.months.join(',')}월</td>
+          <td class="green">${fmt(mon)}/월</td>
+          <td><button class="btn btn-danger" onclick="del(${s.id})" style="padding:4px 10px;font-size:12px">삭제</button></td>
+        </tr>`;
+      }).join('')
+    : '<tr><td colspan="5" class="empty">등록된 종목이 없습니다</td></tr>';
+}
+
+function addStock() {
+  const name = document.getElementById('i-name').value.trim();
+  const mkt = document.getElementById('i-mkt').value;
+  const qty = parseFloat(document.getElementById('i-qty').value) || 0;
+  const buyP = parseFloat(document.getElementById('i-buy').value) || 0;
+  const curP = parseFloat(document.getElementById('i-cur').value) || buyP;
+  const divM = parseFloat(document.getElementById('i-div').value) || 0;
+  const monthsStr = document.getElementById('i-months').value;
+  const months = monthsStr.split(',').map(m => parseInt(m.trim())).filter(m => m >= 1 && m <= 12);
+
+  if (!name || !qty || !buyP) { alert('종목명, 수량, 매입가는 필수입니다.'); return; }
+  if (!months.length) { alert('배당 지급월을 입력해주세요. (예: 1,2,3,...,12)'); return; }
+
+  stocks.push({ id: Date.now(), name, mkt, qty, buyP, curP, divM, months });
+  save();
+  renderMgmt();
+  ['i-name','i-qty','i-buy','i-cur','i-div','i-months'].forEach(id => document.getElementById(id).value = '');
+  alert(`${name} 추가됐습니다!`);
+}
+
+function del(id) {
+  if (!confirm('삭제할까요?')) return;
+  stocks = stocks.filter(s => s.id !== id);
+  save(); renderMgmt();
+}
+
+function resetAll() {
+  if (!confirm('전체 종목을 초기화할까요?')) return;
+  stocks = []; save(); renderMgmt();
+}
+
+function calcR() {
+  const init = (parseFloat(document.getElementById('r-init').value) || 0) * 10000;
+  const yld = (parseFloat(document.getElementById('r-yld').value) || 0) / 100;
+  const add = (parseFloat(document.getElementById('r-add').value) || 0) * 10000;
+  const yrs = parseInt(document.getElementById('r-yrs').value) || 20;
+
+  let total = init;
+  let rows = '';
+  for (let y = 1; y <= yrs; y++) {
+    const divIncome = total * yld;
+    total = total + divIncome + add;
+    if (y <= 5 || y % 5 === 0 || y === yrs) {
+      rows += `<tr>
+        <td>${y}년차</td>
+        <td class="green">${fmt(total)}</td>
+        <td class="green">${fmt(Math.round(total*yld))}</td>
+        <td style="color:var(--text2)">${fmt(total - init - (add*y))} 복리 효과</td>
+      </tr>`;
+    }
+  }
+  document.getElementById('r-final').textContent = fmt(total);
+  document.getElementById('r-ann').textContent = fmt(Math.round(total * yld));
+  document.getElementById('r-tbody').innerHTML = rows;
+}
+
+load();
+renderPf();
+calcR();
+</script>
+</body>
+</html>
