@@ -203,6 +203,9 @@
       <div class="inp-group"><label>시장 구분</label><select id="i-mkt"><option value="ETF">ETF</option><option value="KR">한국주식</option><option value="US">미국주식</option></select></div>
       <div class="inp-group"><label>수량 (주)</label><input id="i-qty" type="number" placeholder="981"></div>
     </div>
+    <div style="display:grid;grid-template-columns:1fr 2fr;gap:8px;margin-bottom:10px">
+      <div class="inp-group"><label>종목코드 (6자리, 분배금 자동조회용)</label><input id="i-code" placeholder="예: 448540" maxlength="6"></div>
+    </div>
     <div class="input-row2">
       <div class="inp-group"><label>매입 평균가 (원)</label><input id="i-buy" type="number" placeholder="25899"></div>
       <div class="inp-group"><label>현재가 (원)</label><input id="i-cur" type="number" placeholder="27300"></div>
@@ -262,12 +265,12 @@ let stocks = [];
 
 function load() {
   try { stocks = JSON.parse(localStorage.getItem(KEY)) || []; } catch(e) { stocks = []; }
-  stocks.forEach(s => { if (!s.divByMonth) s.divByMonth = {}; });
+  stocks.forEach(s => { if (!s.divByMonth) s.divByMonth = {}; if (!s.code) s.code = ''; });
   if (!stocks.length) {
     stocks = [
-      {id:1, name:'TIGER 배당커버드콜액티브', mkt:'ETF', qty:981, buyP:25899, curP:27300, divM:320, months:[1,2,3,4,5,6,7,8,9,10,11,12], divByMonth:{1:314,2:318,3:322,4:316,5:320,6:325}},
-      {id:2, name:'KODEX AI테크TOP10타겟커버드콜', mkt:'ETF', qty:2000, buyP:13625, curP:12410, divM:150, months:[1,2,3,4,5,6,7,8,9,10,11,12], divByMonth:{1:148,2:151,3:153,4:149,5:150,6:152}},
-      {id:3, name:'KODEX 200타겟위클리커버드콜', mkt:'ETF', qty:1000, buyP:26875, curP:26600, divM:350, months:[1,2,3,4,5,6,7,8,9,10,11,12], divByMonth:{1:342,2:355,3:361,4:348,5:352,6:358}}
+      {id:1, name:'TIGER 배당커버드콜액티브', mkt:'ETF', qty:981, buyP:25899, curP:27300, divM:320, months:[1,2,3,4,5,6,7,8,9,10,11,12], divByMonth:{1:314,2:318,3:322,4:316,5:320,6:325}, code:'448540'},
+      {id:2, name:'KODEX AI테크TOP10타겟커버드콜', mkt:'ETF', qty:2000, buyP:13625, curP:12410, divM:150, months:[1,2,3,4,5,6,7,8,9,10,11,12], divByMonth:{1:148,2:151,3:153,4:149,5:150,6:152}, code:'479430'},
+      {id:3, name:'KODEX 200타겟위클리커버드콜', mkt:'ETF', qty:1000, buyP:26875, curP:26600, divM:350, months:[1,2,3,4,5,6,7,8,9,10,11,12], divByMonth:{1:342,2:355,3:361,4:348,5:352,6:358}, code:'458730'}
     ];
     save();
   }
@@ -489,6 +492,16 @@ function renderMgmt() {
   tbody.innerHTML = stocks.map(s => {
     const avgDiv = s.months.length ? s.months.reduce((sum, m) => sum + s.qty * getMonthDiv(s, m), 0) / s.months.length : 0;
     const editPanel = `<div id="ep-${s.id}" class="month-edit-panel">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+        <div style="font-size:11px;color:var(--text2)">종목코드</div>
+        <input id="code-${s.id}" type="text" value="${s.code||''}" maxlength="6" placeholder="6자리"
+          style="width:80px;padding:4px 6px;font-size:12px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--text)"
+          onchange="saveCode(${s.id},this.value)">
+        <button class="btn btn-primary" id="fetch-btn-${s.id}" onclick="fetchDividend(${s.id})"
+          style="padding:4px 10px;font-size:12px" ${s.code?'':'disabled'}>
+          🔄 분배금 자동조회
+        </button>
+      </div>
       <div style="font-size:11px;color:var(--text2);margin-bottom:6px">월별 주당 배당금 — 입력 시 확정으로 저장됩니다</div>
       <div class="month-edit-grid">
         ${s.months.map(m => {
@@ -523,6 +536,39 @@ function toggleEdit(id) {
   const el = document.getElementById('ep-' + id);
   if (el) el.classList.toggle('open');
 }
+function saveCode(id, code) {
+  const s = stocks.find(st => st.id === id);
+  if (!s) return;
+  s.code = code.trim();
+  save();
+  const btn = document.getElementById('fetch-btn-' + id);
+  if (btn) btn.disabled = !s.code;
+}
+async function fetchDividend(id) {
+  const s = stocks.find(st => st.id === id);
+  if (!s || !s.code) return;
+  const btn = document.getElementById('fetch-btn-' + id);
+  if (btn) { btn.textContent = '⏳ 조회중...'; btn.disabled = true; }
+  try {
+    const resp = await fetch(`/api/dividend?code=${s.code}`);
+    const data = await resp.json();
+    if (data.error) throw new Error(data.error);
+    const list = data.distributions || [];
+    if (!list.length) throw new Error('분배금 데이터가 없습니다');
+    if (!s.divByMonth) s.divByMonth = {};
+    const year = new Date().getFullYear();
+    let cnt = 0;
+    list.filter(d => d.year === year).forEach(d => { s.divByMonth[d.month] = d.amount; cnt++; });
+    if (!cnt) list.forEach(d => { s.divByMonth[d.month] = d.amount; cnt++; });
+    save();
+    renderMgmt();
+    renderCal();
+    alert(`✅ ${s.name}\n${cnt}개월 분배금 데이터를 가져왔습니다 (확정 처리)`);
+  } catch (e) {
+    alert('❌ 조회 실패: ' + e.message + '\n\n종목코드를 확인하거나 월별 배당금을 직접 입력해주세요.');
+    if (btn) { btn.textContent = '🔄 분배금 자동조회'; btn.disabled = false; }
+  }
+}
 function setMonthDiv(id, month, amt) {
   const s = stocks.find(st => st.id === id);
   if (!s) return;
@@ -550,10 +596,11 @@ function addStock() {
   if (!name || !qty || !buyP) { alert('종목명, 수량, 매입가는 필수입니다.'); return; }
   if (!months.length) { alert('배당 지급월을 입력해주세요. (예: 1,2,3,...,12)'); return; }
 
-  stocks.push({ id: Date.now(), name, mkt, qty, buyP, curP, divM, months, divByMonth: {} });
+  const code = document.getElementById('i-code').value.trim();
+  stocks.push({ id: Date.now(), name, mkt, qty, buyP, curP, divM, months, divByMonth: {}, code });
   save();
   renderMgmt();
-  ['i-name','i-qty','i-buy','i-cur','i-div','i-months'].forEach(id => document.getElementById(id).value = '');
+  ['i-name','i-qty','i-buy','i-cur','i-div','i-months','i-code'].forEach(id => document.getElementById(id).value = '');
   alert(`${name} 추가됐습니다!`);
 }
 
