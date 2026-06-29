@@ -125,6 +125,13 @@
 
   .empty { text-align: center; padding: 32px; color: var(--text3); font-size: 13px; }
   .tag { display: inline-block; font-size: 10px; padding: 1px 6px; border-radius: 4px; background: var(--blue-bg); color: var(--blue); margin-left: 4px; }
+  .conf-badge { display:inline-block; font-size:9px; padding:1px 4px; border-radius:3px; font-weight:500; vertical-align:middle; }
+  .conf-badge.confirmed { background:var(--green-bg); color:var(--green); }
+  .conf-badge.estimated { background:var(--amber-bg); color:var(--amber); }
+  .conf-badge.mixed { background:var(--blue-bg); color:var(--blue); }
+  .month-edit-panel { display:none; padding:10px 6px 6px; background:var(--surface2); }
+  .month-edit-panel.open { display:block; }
+  .month-edit-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(58px,1fr)); gap:6px; }
 </style>
 </head>
 <body>
@@ -255,17 +262,25 @@ let stocks = [];
 
 function load() {
   try { stocks = JSON.parse(localStorage.getItem(KEY)) || []; } catch(e) { stocks = []; }
+  stocks.forEach(s => { if (!s.divByMonth) s.divByMonth = {}; });
   if (!stocks.length) {
     stocks = [
-      {id:1, name:'TIGER 배당커버드콜액티브', mkt:'ETF', qty:981, buyP:25899, curP:27300, divM:320, months:[1,2,3,4,5,6,7,8,9,10,11,12]},
-      {id:2, name:'KODEX AI테크TOP10타겟커버드콜', mkt:'ETF', qty:2000, buyP:13625, curP:12410, divM:150, months:[1,2,3,4,5,6,7,8,9,10,11,12]},
-      {id:3, name:'KODEX 200타겟위클리커버드콜', mkt:'ETF', qty:1000, buyP:26875, curP:26600, divM:350, months:[1,2,3,4,5,6,7,8,9,10,11,12]}
+      {id:1, name:'TIGER 배당커버드콜액티브', mkt:'ETF', qty:981, buyP:25899, curP:27300, divM:320, months:[1,2,3,4,5,6,7,8,9,10,11,12], divByMonth:{1:314,2:318,3:322,4:316,5:320,6:325}},
+      {id:2, name:'KODEX AI테크TOP10타겟커버드콜', mkt:'ETF', qty:2000, buyP:13625, curP:12410, divM:150, months:[1,2,3,4,5,6,7,8,9,10,11,12], divByMonth:{1:148,2:151,3:153,4:149,5:150,6:152}},
+      {id:3, name:'KODEX 200타겟위클리커버드콜', mkt:'ETF', qty:1000, buyP:26875, curP:26600, divM:350, months:[1,2,3,4,5,6,7,8,9,10,11,12], divByMonth:{1:342,2:355,3:361,4:348,5:352,6:358}}
     ];
     save();
   }
 }
 
 function save() { localStorage.setItem(KEY, JSON.stringify(stocks)); }
+
+function getMonthDiv(s, m) {
+  return (s.divByMonth && s.divByMonth[m] !== undefined) ? s.divByMonth[m] : (s.divM || 0);
+}
+function isConf(s, m) {
+  return !!(s.divByMonth && s.divByMonth[m] !== undefined);
+}
 
 function fmt(n) {
   const abs = Math.abs(n);
@@ -294,7 +309,7 @@ function renderPf() {
   stocks.forEach(s => {
     inv += s.qty * s.buyP;
     val += s.qty * s.curP;
-    annDiv += s.qty * s.divM * s.months.length;
+    annDiv += s.months.reduce((sum, m) => sum + s.qty * getMonthDiv(s, m), 0);
   });
   const gain = val - inv;
   const gainPct = inv ? ((gain/inv)*100) : 0;
@@ -310,7 +325,7 @@ function renderPf() {
 
   document.getElementById('stock-tbody').innerHTML = stocks.length
     ? stocks.map(s => {
-        const ann = s.qty * s.divM * s.months.length;
+        const ann = s.months.reduce((sum, m) => sum + s.qty * getMonthDiv(s, m), 0);
         const gp = ((s.curP - s.buyP) / s.buyP * 100);
         const yld = s.curP ? ((ann / (s.qty * s.curP)) * 100) : 0;
         return `<tr>
@@ -328,11 +343,13 @@ function renderPf() {
 
 function renderCal() {
   const mnames = ['1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'];
-  const byM = Array(12).fill(0).map(() => ({amt:0, names:[]}));
+  const byM = Array(12).fill(0).map(() => ({amt:0, names:[], anyConf:false, hasEst:false}));
   stocks.forEach(s => {
     s.months.forEach(m => {
-      byM[m-1].amt += s.qty * s.divM;
+      byM[m-1].amt += s.qty * getMonthDiv(s, m);
       byM[m-1].names.push(s.name.length > 10 ? s.name.substring(0,10)+'...' : s.name);
+      if (isConf(s, m)) byM[m-1].anyConf = true;
+      else byM[m-1].hasEst = true;
     });
   });
 
@@ -347,7 +364,8 @@ function renderCal() {
   const perStock = stocks.map((s, si) => ({
     name: s.name,
     color: colors[si % colors.length],
-    byMonth: Array(12).fill(0).map((_, mi) => s.months.includes(mi + 1) ? s.qty * s.divM : 0)
+    byMonth: Array(12).fill(0).map((_, mi) => s.months.includes(mi + 1) ? s.qty * getMonthDiv(s, mi + 1) : 0),
+    confByMonth: Array(12).fill(false).map((_, mi) => s.months.includes(mi + 1) && isConf(s, mi + 1))
   }));
 
   const chartEl = document.getElementById('cal-chart');
@@ -379,7 +397,8 @@ function renderCal() {
       if (!amt) return;
       const bh = Math.max(2, Math.round(amt / max * chartH));
       const bx = groupX + si * (barW + 1);
-      bars += `<rect x="${bx}" y="${padT + chartH - bh}" width="${barW}" height="${bh}" rx="2" fill="${ps.color}" opacity="0.85"/>`;
+      const opacity = ps.confByMonth[mi] ? '0.85' : '0.35';
+      bars += `<rect x="${bx}" y="${padT + chartH - bh}" width="${barW}" height="${bh}" rx="2" fill="${ps.color}" opacity="${opacity}"/>`;
     });
     bars += `<text x="${padL + gap * mi + gap / 2}" y="${padT + chartH + 14}" text-anchor="middle" font-size="10" fill="${colText2}">${mnames[mi]}</text>`;
   }
@@ -394,14 +413,16 @@ function renderCal() {
     legend += `<text x="${lx + 13}" y="${ly}" font-size="9" fill="${colText2}">${shortName}</text>`;
   });
 
+  const legendNote = `<text x="${padL}" y="${svgH - 2}" font-size="8" fill="${colText2}">진한 색 = 확정  연한 색 = 예상</text>`;
   chartEl.innerHTML = `<svg width="${W}" height="${svgH}" xmlns="http://www.w3.org/2000/svg">
-    ${gridLines}${yLabels}${bars}${legend}
+    ${gridLines}${yLabels}${bars}${legend}${legendNote}
   </svg>`;
   document.getElementById('cal-grid').innerHTML = byM.map((m, i) => `
     <div class="cal-m${m.amt?' has':''}" ${m.amt ? `onclick="showMonthDetail(${i+1})"` : ''}>
       <div class="cal-m-name">${mnames[i]}</div>
       ${m.amt
         ? `<div class="cal-m-amt">${fmt(m.amt)}</div>
+           <div style="margin:2px 0"><span class="conf-badge ${m.hasEst?(m.anyConf?'mixed':'estimated'):'confirmed'}">${m.hasEst?(m.anyConf?'일부확정':'예상'):'확정'}</span></div>
            <div class="cal-m-stocks">${m.names.map(n=>n.split('커버드')[0].trim()).join('<br>')}</div>
            <div class="cal-m-bar"><div class="cal-m-bar-fill" style="width:${Math.round(m.amt/max*100)}%"></div></div>`
         : '<div style="font-size:10px;color:var(--text3);margin-top:8px">-</div>'
@@ -430,7 +451,7 @@ function showMonthDetail(month) {
   document.querySelectorAll('.cal-m').forEach((el, i) => el.classList.toggle('selected', i + 1 === month));
 
   const paying = stocks.filter(s => s.months.includes(month));
-  const total = paying.reduce((sum, s) => sum + s.qty * s.divM, 0);
+  const total = paying.reduce((sum, s) => sum + s.qty * getMonthDiv(s, month), 0);
 
   detail.dataset.month = month;
   detail.innerHTML = `
@@ -439,12 +460,16 @@ function showMonthDetail(month) {
       <table>
         <thead><tr><th>종목명</th><th style="text-align:right">주당 배당금</th><th style="text-align:right">수량</th><th style="text-align:right">월 배당금</th></tr></thead>
         <tbody>
-          ${paying.map(s => `<tr>
-            <td><span class="badge badge-etf">${s.mkt}</span> ${s.name}</td>
-            <td style="text-align:right">${fmtFull(s.divM)}</td>
-            <td style="text-align:right">${s.qty.toLocaleString()}주</td>
-            <td style="text-align:right" class="green">${fmt(s.qty * s.divM)}</td>
-          </tr>`).join('')}
+          ${paying.map(s => {
+            const conf = isConf(s, month);
+            const div = getMonthDiv(s, month);
+            return `<tr>
+              <td><span class="badge badge-etf">${s.mkt}</span> ${s.name}</td>
+              <td style="text-align:right">${fmtFull(div)} <span class="conf-badge ${conf?'confirmed':'estimated'}">${conf?'확정':'예상'}</span></td>
+              <td style="text-align:right">${s.qty.toLocaleString()}주</td>
+              <td style="text-align:right" class="green">${fmt(s.qty * div)}</td>
+            </tr>`;
+          }).join('')}
         </tbody>
         <tfoot><tr>
           <td colspan="3" style="text-align:right;font-weight:600;padding-top:10px">합계</td>
@@ -456,18 +481,60 @@ function showMonthDetail(month) {
 }
 
 function renderMgmt() {
-  document.getElementById('mgmt-tbody').innerHTML = stocks.length
-    ? stocks.map(s => {
-        const mon = s.qty * s.divM;
-        return `<tr>
-          <td>${s.name}</td>
-          <td>${s.qty.toLocaleString()}주</td>
-          <td style="font-size:11px;color:var(--text2)">${s.months.join(',')}월</td>
-          <td class="green">${fmt(mon)}/월</td>
-          <td><button class="btn btn-danger" onclick="del(${s.id})" style="padding:4px 10px;font-size:12px">삭제</button></td>
-        </tr>`;
-      }).join('')
-    : '<tr><td colspan="5" class="empty">등록된 종목이 없습니다</td></tr>';
+  const tbody = document.getElementById('mgmt-tbody');
+  if (!stocks.length) {
+    tbody.innerHTML = '<tr><td colspan="5" class="empty">등록된 종목이 없습니다</td></tr>';
+    return;
+  }
+  tbody.innerHTML = stocks.map(s => {
+    const avgDiv = s.months.length ? s.months.reduce((sum, m) => sum + s.qty * getMonthDiv(s, m), 0) / s.months.length : 0;
+    const editPanel = `<div id="ep-${s.id}" class="month-edit-panel">
+      <div style="font-size:11px;color:var(--text2);margin-bottom:6px">월별 주당 배당금 — 입력 시 확정으로 저장됩니다</div>
+      <div class="month-edit-grid">
+        ${s.months.map(m => {
+          const conf = isConf(s, m);
+          const amt = getMonthDiv(s, m);
+          return `<div style="text-align:center">
+            <div style="font-size:9px;margin-bottom:2px">${m}월 <span class="conf-badge ${conf?'confirmed':'estimated'}">${conf?'확정':'예상'}</span></div>
+            <input type="number" value="${amt}" min="0" style="padding:3px;text-align:center;font-size:11px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--text)"
+              onchange="setMonthDiv(${s.id},${m},+this.value)">
+            ${conf ? `<div style="font-size:9px;color:var(--amber);cursor:pointer;margin-top:2px" onclick="clearMonthDiv(${s.id},${m})">↩예상으로</div>` : ''}
+          </div>`;
+        }).join('')}
+      </div>
+    </div>`;
+    return `<tr>
+      <td>${s.name}</td>
+      <td>${s.qty.toLocaleString()}주</td>
+      <td style="font-size:11px;color:var(--text2)">${s.months.join(',')}월</td>
+      <td class="green">${fmt(avgDiv)}/월 평균</td>
+      <td>
+        <div style="display:flex;gap:4px;flex-wrap:wrap">
+          <button class="btn" onclick="toggleEdit(${s.id})" style="padding:4px 8px;font-size:11px">월별편집</button>
+          <button class="btn btn-danger" onclick="del(${s.id})" style="padding:4px 10px;font-size:12px">삭제</button>
+        </div>
+      </td>
+    </tr>
+    <tr><td colspan="5" style="padding:0;border:none">${editPanel}</td></tr>`;
+  }).join('');
+}
+
+function toggleEdit(id) {
+  const el = document.getElementById('ep-' + id);
+  if (el) el.classList.toggle('open');
+}
+function setMonthDiv(id, month, amt) {
+  const s = stocks.find(st => st.id === id);
+  if (!s) return;
+  if (!s.divByMonth) s.divByMonth = {};
+  if (!isNaN(amt) && amt >= 0) s.divByMonth[month] = amt;
+  save(); renderMgmt();
+}
+function clearMonthDiv(id, month) {
+  const s = stocks.find(st => st.id === id);
+  if (!s || !s.divByMonth) return;
+  delete s.divByMonth[month];
+  save(); renderMgmt();
 }
 
 function addStock() {
@@ -483,7 +550,7 @@ function addStock() {
   if (!name || !qty || !buyP) { alert('종목명, 수량, 매입가는 필수입니다.'); return; }
   if (!months.length) { alert('배당 지급월을 입력해주세요. (예: 1,2,3,...,12)'); return; }
 
-  stocks.push({ id: Date.now(), name, mkt, qty, buyP, curP, divM, months });
+  stocks.push({ id: Date.now(), name, mkt, qty, buyP, curP, divM, months, divByMonth: {} });
   save();
   renderMgmt();
   ['i-name','i-qty','i-buy','i-cur','i-div','i-months'].forEach(id => document.getElementById(id).value = '');
