@@ -78,8 +78,15 @@
 
   .cal-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; margin-bottom: 14px; }
   @media (max-width: 480px) { .cal-grid { grid-template-columns: repeat(3, 1fr); } }
-  .cal-m { background: var(--surface2); border-radius: var(--radius); padding: 8px 6px; text-align: center; min-height: 80px; }
-  .cal-m.has { background: var(--green-bg); }
+  .cal-m { background: var(--surface2); border-radius: var(--radius); padding: 8px 6px; text-align: center; min-height: 80px; transition: opacity 0.15s; }
+  .cal-m.has { background: var(--green-bg); cursor: pointer; }
+  .cal-m.has:hover { opacity: 0.8; }
+  .cal-m.selected { outline: 2px solid var(--green); }
+  .month-detail { display: none; margin-top: 12px; background: var(--surface2); border-radius: var(--radius); padding: 14px; }
+  .month-detail.show { display: block; }
+  .month-detail-title { font-size: 13px; font-weight: 600; margin-bottom: 10px; color: var(--green); }
+  .month-detail table { min-width: 0; }
+  tfoot td { border-top: 1px solid var(--border); }
   .cal-m-name { font-size: 10px; color: var(--text2); margin-bottom: 5px; font-weight: 500; }
   .cal-m.has .cal-m-name { color: var(--green); }
   .cal-m-amt { font-size: 12px; font-weight: 600; color: var(--green); }
@@ -166,9 +173,14 @@
 <!-- 배당 달력 탭 -->
 <div id="cal" class="sec">
   <div class="card">
+    <div class="card-title">📊 월별 배당금 차트</div>
+    <div id="cal-chart" style="width:100%;overflow-x:auto"></div>
+  </div>
+  <div class="card">
     <div class="card-title">📅 월별 배당금 수령 일정</div>
     <div class="cal-grid" id="cal-grid"></div>
-    <div style="font-size:11px;color:var(--text2);margin-bottom:12px">※ 초록색 = 배당 수령 월</div>
+    <div id="month-detail" class="month-detail"></div>
+    <div style="font-size:11px;color:var(--text2);margin-bottom:12px">※ 초록색 = 배당 수령 월 · 클릭하면 상세 보기</div>
     <div class="card-title" style="margin-top:8px">분기별 합계</div>
     <div class="q-grid" id="q-grid"></div>
   </div>
@@ -323,9 +335,70 @@ function renderCal() {
       byM[m-1].names.push(s.name.length > 10 ? s.name.substring(0,10)+'...' : s.name);
     });
   });
-  const max = Math.max(...byM.map(m => m.amt), 1);
+
+  // 종목별 누적 막대 차트
+  const palette = ['#1a7a4a','#1a5fa8','#c0392b','#8a5e00','#7b3fa0'];
+  const paletteDark = ['#4caf7a','#6faee8','#e57373','#f0b942','#ce93d8'];
+  const isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+  const colors = isDark ? paletteDark : palette;
+  const colText2 = isDark ? '#a0a09c' : '#6b6b67';
+  const colBorder = isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)';
+
+  const perStock = stocks.map((s, si) => ({
+    name: s.name,
+    color: colors[si % colors.length],
+    byMonth: Array(12).fill(0).map((_, mi) => s.months.includes(mi + 1) ? s.qty * s.divM : 0)
+  }));
+
+  const chartEl = document.getElementById('cal-chart');
+  const W = chartEl.clientWidth || 600;
+  const padL = 60, padR = 10, padT = 16, chartH = 150;
+  const legendRows = Math.ceil(perStock.length / 3);
+  const svgH = padT + chartH + 20 + legendRows * 20;
+  const chartW = W - padL - padR;
+  const max = Math.max(...perStock.flatMap(ps => ps.byMonth), 1);
+  const gap = chartW / 12;
+  const n = perStock.length || 1;
+  const barGroupW = gap * 0.82;
+  const barW = Math.max(1, barGroupW / n - 1);
+
+  const yTicks = 4;
+  let gridLines = '', yLabels = '';
+  for (let i = 0; i <= yTicks; i++) {
+    const y = padT + chartH - Math.round(chartH / yTicks * i);
+    const val = Math.round(max / yTicks * i);
+    gridLines += `<line x1="${padL}" y1="${y}" x2="${W - padR}" y2="${y}" stroke="${colBorder}" stroke-width="1"/>`;
+    yLabels += `<text x="${padL - 6}" y="${y + 4}" text-anchor="end" font-size="10" fill="${colText2}">${fmt(val)}</text>`;
+  }
+
+  let bars = '';
+  for (let mi = 0; mi < 12; mi++) {
+    const groupX = padL + gap * mi + (gap - barGroupW) / 2;
+    perStock.forEach((ps, si) => {
+      const amt = ps.byMonth[mi];
+      if (!amt) return;
+      const bh = Math.max(2, Math.round(amt / max * chartH));
+      const bx = groupX + si * (barW + 1);
+      bars += `<rect x="${bx}" y="${padT + chartH - bh}" width="${barW}" height="${bh}" rx="2" fill="${ps.color}" opacity="0.85"/>`;
+    });
+    bars += `<text x="${padL + gap * mi + gap / 2}" y="${padT + chartH + 14}" text-anchor="middle" font-size="10" fill="${colText2}">${mnames[mi]}</text>`;
+  }
+
+  let legend = '';
+  perStock.forEach((ps, i) => {
+    const col = i % 3, row = Math.floor(i / 3);
+    const lx = padL + col * (chartW / 3);
+    const ly = padT + chartH + 28 + row * 20;
+    const shortName = ps.name.length > 16 ? ps.name.substring(0, 16) + '…' : ps.name;
+    legend += `<rect x="${lx}" y="${ly - 8}" width="9" height="9" rx="2" fill="${ps.color}" opacity="0.85"/>`;
+    legend += `<text x="${lx + 13}" y="${ly}" font-size="9" fill="${colText2}">${shortName}</text>`;
+  });
+
+  chartEl.innerHTML = `<svg width="${W}" height="${svgH}" xmlns="http://www.w3.org/2000/svg">
+    ${gridLines}${yLabels}${bars}${legend}
+  </svg>`;
   document.getElementById('cal-grid').innerHTML = byM.map((m, i) => `
-    <div class="cal-m${m.amt?' has':''}">
+    <div class="cal-m${m.amt?' has':''}" ${m.amt ? `onclick="showMonthDetail(${i+1})"` : ''}>
       <div class="cal-m-name">${mnames[i]}</div>
       ${m.amt
         ? `<div class="cal-m-amt">${fmt(m.amt)}</div>
@@ -335,10 +408,51 @@ function renderCal() {
       }
     </div>`).join('');
 
+
   const q = [0,0,0,0];
   byM.forEach((m, i) => q[Math.floor(i/3)] += m.amt);
   document.getElementById('q-grid').innerHTML = ['1분기 (1~3월)','2분기 (4~6월)','3분기 (7~9월)','4분기 (10~12월)'].map((n,i) => `
     <div class="q-stat"><div class="q-label">${n}</div><div class="q-value">${fmt(q[i])}</div></div>`).join('');
+}
+
+function showMonthDetail(month) {
+  const mnames = ['1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'];
+  const detail = document.getElementById('month-detail');
+
+  // 같은 달 재클릭 시 닫기
+  if (detail.dataset.month === String(month) && detail.classList.contains('show')) {
+    detail.classList.remove('show');
+    detail.dataset.month = '';
+    document.querySelectorAll('.cal-m').forEach(el => el.classList.remove('selected'));
+    return;
+  }
+
+  document.querySelectorAll('.cal-m').forEach((el, i) => el.classList.toggle('selected', i + 1 === month));
+
+  const paying = stocks.filter(s => s.months.includes(month));
+  const total = paying.reduce((sum, s) => sum + s.qty * s.divM, 0);
+
+  detail.dataset.month = month;
+  detail.innerHTML = `
+    <div class="month-detail-title">📌 ${mnames[month-1]} 배당 상세</div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>종목명</th><th style="text-align:right">주당 배당금</th><th style="text-align:right">수량</th><th style="text-align:right">월 배당금</th></tr></thead>
+        <tbody>
+          ${paying.map(s => `<tr>
+            <td><span class="badge badge-etf">${s.mkt}</span> ${s.name}</td>
+            <td style="text-align:right">${fmtFull(s.divM)}</td>
+            <td style="text-align:right">${s.qty.toLocaleString()}주</td>
+            <td style="text-align:right" class="green">${fmt(s.qty * s.divM)}</td>
+          </tr>`).join('')}
+        </tbody>
+        <tfoot><tr>
+          <td colspan="3" style="text-align:right;font-weight:600;padding-top:10px">합계</td>
+          <td style="text-align:right;font-weight:700;padding-top:10px" class="green">${fmt(total)}</td>
+        </tr></tfoot>
+      </table>
+    </div>`;
+  detail.classList.add('show');
 }
 
 function renderMgmt() {
